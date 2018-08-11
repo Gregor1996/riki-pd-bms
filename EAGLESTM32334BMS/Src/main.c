@@ -378,6 +378,7 @@ int main(void)
 	  	  // Send all Voltages and Temperatures data via CAN
 	  	  //remove 2nd dimension for can
 
+	 // if(HAL_CAN_Receive(&hcan,CAN_FIFO0, 1) == 0xff){
 	  	  	  for(int i=0;i<108;i++){
 	  	  		 cell_voltages_vector[i]=cell_voltages[i][0];
 	  	  		  }
@@ -421,27 +422,26 @@ int main(void)
 
 
 	  		  }
+	  		  //stop message
+	  		  TxMsg.IDE = CAN_ID_STD;
+	  		 		  TxMsg.RTR = CAN_RTR_DATA;
+	  		 		  TxMsg.DLC = 8;
+	  		 		  TxMsg.StdId = 0xDD;
 
-//	  		  TxMsg.IDE = CAN_ID_STD;
-//	  		 		  TxMsg.RTR = CAN_RTR_DATA;
-//	  		 		  TxMsg.DLC = 8;
-//	  		 		  TxMsg.StdId = 0xAC;
-//
-//	  		 		  for(int i=0;i<27;i=i+4){
-//
-//	  		 		  TxMsg.Data[0] = 0x;
-//	  		 		  TxMsg.Data[1] = 0;
-//	  		 		  TxMsg.Data[2] = 0;
-//	  		 		  TxMsg.Data[3] = 0;
-//	  		 		  TxMsg.Data[4] = 0;
-//	  		 		  TxMsg.Data[5] = 0;
-//	  		 		  TxMsg.Data[6] = 0;
-//	  		 		  TxMsg.Data[7] = 0;
-//	  		 		  hcan.pTxMsg = &TxMsg;
-//	  		 		  HAL_CAN_Transmit(&hcan, 10);
-//
-//	  		 		  }
 
+
+	  		 		  TxMsg.Data[0] = 0xDD;
+	  		 		  TxMsg.Data[1] = 0;
+	  		 		  TxMsg.Data[2] = 0;
+	  		 		  TxMsg.Data[3] = 0;
+	  		 		  TxMsg.Data[4] = 0;
+	  		 		  TxMsg.Data[5] = 0;
+	  		 		  TxMsg.Data[6] = 0;
+	  		 		  TxMsg.Data[7] = 0;
+	  		 		  hcan.pTxMsg = &TxMsg;
+	  		 		  HAL_CAN_Transmit(&hcan, 10);
+
+	//  }
   /* USER CODE END WHILE */
 
   /* USER CODE BEGIN 3 */
