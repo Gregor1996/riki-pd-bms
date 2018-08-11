@@ -374,6 +374,7 @@ int main(void)
 	  //
 	  //	  	  }
 	  //
+	  if(HAL_CAN_Receive(&hcan,CAN_FIFO0, 1) == 0xA8){   //da concordare con PILOTAPAZZO
 
 	  	  // Send all Voltages and Temperatures data via CAN
 	  	  //remove 2nd dimension for can
@@ -421,7 +422,7 @@ int main(void)
 
 
 	  		  }
-
+	  }
 //	  		  TxMsg.IDE = CAN_ID_STD;
 //	  		 		  TxMsg.RTR = CAN_RTR_DATA;
 //	  		 		  TxMsg.DLC = 8;
