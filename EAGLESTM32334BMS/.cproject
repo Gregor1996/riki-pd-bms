@@ -97,6 +97,9 @@
 							</tool>
 						</toolChain>
 					</folderInfo>
+					<fileInfo id="fr.ac6.managedbuild.config.gnu.cross.exe.debug.642797824.1115387568" name="main.c" rcbsApplicability="disable" resourcePath="Src/main.c" toolsToInvoke="fr.ac6.managedbuild.tool.gnu.cross.c.compiler.640073630.944462373">
+						<tool id="fr.ac6.managedbuild.tool.gnu.cross.c.compiler.640073630.944462373" name="MCU GCC Compiler" superClass="fr.ac6.managedbuild.tool.gnu.cross.c.compiler.640073630" />
+					</fileInfo>
 					<sourceEntries>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="startup" />
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Drivers" />
@@ -207,6 +210,9 @@
 							</tool>
 						</toolChain>
 					</folderInfo>
+					<fileInfo id="fr.ac6.managedbuild.config.gnu.cross.exe.release.290685664.1040874450" name="main.c" rcbsApplicability="disable" resourcePath="Src/main.c" toolsToInvoke="fr.ac6.managedbuild.tool.gnu.cross.c.compiler.640073630.1852654991">
+						<tool id="fr.ac6.managedbuild.tool.gnu.cross.c.compiler.640073630.1852654991" name="MCU GCC Compiler" superClass="fr.ac6.managedbuild.tool.gnu.cross.c.compiler.640073630" />
+					</fileInfo>
 					<sourceEntries>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="startup" />
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Drivers" />
@@ -232,7 +238,9 @@
 		<configuration configurationName="Debug">
 			<resource resourceType="PROJECT" workspacePath="EAGLESTM32334BMS" />
 		</configuration>
-		<configuration configurationName="Release" />
+		<configuration configurationName="Release">
+			<resource resourceType="PROJECT" workspacePath="/EAGLESTM32334BMS" />
+		</configuration>
 	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets" />
 </cproject>

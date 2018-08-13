@@ -57,6 +57,7 @@ CanTxMsgTypeDef TxMsg;
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
+DMA_HandleTypeDef hdma_adc1;
 
 CAN_HandleTypeDef hcan;
 
@@ -89,6 +90,10 @@ uint8_t eb[2];
 int16_t inv1_bus_voltage;
 int16_t inv2_bus_voltage;
 int32_t bus_voltage;
+int32_t avg_c;
+int16_t c[15];
+int16_t mavg_counter = 0;
+uint16_t precharge_timer = 0;
 int counterCicle = 0;
 
 /* USER CODE END PV */
@@ -96,6 +101,7 @@ int counterCicle = 0;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_CAN_Init(void);
@@ -139,6 +145,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_SPI1_Init();
   MX_ADC1_Init();
   MX_CAN_Init();
@@ -146,31 +153,32 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   // CAN FIlter Initialization
+  tsONfilter.FilterNumber = 0;
   tsONfilter.FilterMode = CAN_FILTERMODE_IDLIST;
   tsONfilter.FilterIdLow = 0x55 << 5;
-  tsONfilter.FilterIdHigh = 0x55 << 5;
+  tsONfilter.FilterIdHigh = 0xA8 << 5;
   tsONfilter.FilterMaskIdHigh = 0x55 << 5;
   tsONfilter.FilterMaskIdLow = 0x55 << 5;
-  tsONfilter.FilterFIFOAssignment = CAN_FILTER_FIFO0;
-  tsONfilter.BankNumber = 0;
+  tsONfilter.FilterFIFOAssignment = CAN_FILTER_FIFO1;
   tsONfilter.FilterScale  = CAN_FILTERSCALE_16BIT;
   tsONfilter.FilterActivation = ENABLE;
   HAL_CAN_ConfigFilter(&hcan, &tsONfilter);
 
+  invfilter.FilterNumber = 1;
   invfilter.FilterMode = CAN_FILTERMODE_IDLIST;
   invfilter.FilterIdLow = 0x181 << 5;
   invfilter.FilterIdHigh = 0x182 << 5;
   invfilter.FilterMaskIdHigh = 0x181 << 5;
   invfilter.FilterMaskIdLow = 0x182 << 5;
-  invfilter.FilterFIFOAssignment = CAN_FILTER_FIFO1;
-  invfilter.BankNumber = 1;
+  invfilter.FilterFIFOAssignment = CAN_FILTER_FIFO0;
   invfilter.FilterScale  = CAN_FILTERSCALE_16BIT;
   invfilter.FilterActivation = ENABLE;
   HAL_CAN_ConfigFilter(&hcan, &invfilter);
 
   // BMS Status OFF
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
-  precharge = 0;
+  precharge = 1;
+  counterCicle++;
 
 
   // First cell  reads
@@ -202,8 +210,12 @@ int main(void)
   cell_temperatures[91][0]=(cell_temperatures[92][0]+cell_temperatures[93][0])/2;
   cell_temperatures[90][1]=0;
   cell_temperatures[91][1]=0;
+  counterCicle++;
+
   //Start current measuring
   HAL_ADC_Start_DMA(&hadc1, adcCurrent, 512);
+  counterCicle++;
+
 
   /* USER CODE END 2 */
 
@@ -237,12 +249,21 @@ int main(void)
 	  cell_temperatures[91][0]=(cell_temperatures[92][0]+cell_temperatures[93][0])/2;
 	  cell_temperatures[90][1]=0;
 	  cell_temperatures[91][1]=0;
+	  counterCicle++;
+
 
 	  //Current
 	  current = 0;
 	  for(int i = 0; i < 512; i++)
 		  current += adcCurrent[i];
-	  current = (current/512 - 2541) * 10 * 256 / 33;
+	  avg_c = 0;
+	  current = - (current/512 - 2589)  * 13.30;
+	  c[mavg_counter] = current;
+	  if(mavg_counter++ == 15)
+		  mavg_counter = 0;
+	  for(int i = 0; i < 15; i++)
+		  avg_c += c[i];
+	  avg_c = avg_c / 15;
 
 	  state = status(cell_voltages, cell_temperatures, &pack_v, &min_v, &max_v, &avg_v, &max_t, &avg_t, &current, &TxMsg);
 	  if(state == PACK_OK){
@@ -292,10 +313,10 @@ int main(void)
 	  TxMsg.IDE = CAN_ID_STD;
 	  TxMsg.RTR = CAN_RTR_DATA;
 	  TxMsg.DLC = 8;
-	  TxMsg.StdId = 0x05;
-	  TxMsg.Data[0] = 0x02;
-	  TxMsg.Data[1] = (int8_t) current;
-	  TxMsg.Data[2] = 0;
+	  TxMsg.StdId = 0xAA;
+	  TxMsg.Data[0] = 0x05;
+	  TxMsg.Data[1] = (int8_t) (current >> 8);
+	  TxMsg.Data[2] = (int8_t) current;
 	  TxMsg.Data[3] = 0;
 	  TxMsg.Data[4] = 0;
 	  TxMsg.Data[5] = 0;
@@ -304,7 +325,7 @@ int main(void)
 	  hcan.pTxMsg = &TxMsg;
 	  HAL_CAN_Transmit(&hcan, 10);
 
-	  if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_6) == GPIO_PIN_SET && precharge == 0){
+	  if(precharge == 0){
 
 		  //inverter1 bus voltage request
 		  TxMsg.IDE = CAN_ID_STD;
@@ -328,26 +349,29 @@ int main(void)
 		  hcan.pTxMsg = &TxMsg;
 		  HAL_CAN_Transmit(&hcan, 10);
 
-		  if(HAL_CAN_Receive(&hcan,CAN_FIFO1, 1) == HAL_OK){
+		  hcan.pRxMsg = &RxMsg;
+		  if(HAL_CAN_Receive(&hcan,CAN_FIFO0, 10) == HAL_OK){
 
-			  if(RxMsg.StdId == 0x181 && RxMsg.Data[0] == 0xEB){
-
-				  eb[0] = RxMsg.Data[2];
-				  eb[1] = RxMsg.Data[1];
-				  memcpy(&inv1_bus_voltage, eb, 2);
-
-			  }
-			  if(RxMsg.StdId == 0x182 && RxMsg.Data[0] == 0xEB){
-
-				  eb[0] = RxMsg.Data[2];
-				  eb[1] = RxMsg.Data[1];
-				  memcpy(&inv2_bus_voltage, eb, 2);
-
-			  }
-
+			  HAL_Delay(1000);
 		  }
+//
+//			  if(RxMsg.StdId == 0x181 && RxMsg.Data[0] == 0xEB){
+//
+//				  inv1_bus_voltage = RxMsg.Data[2] << 8;
+//				  inv1_bus_voltage += RxMsg.Data[1];
+//
+//			  }
+//			  if(RxMsg.StdId == 0x182 && RxMsg.Data[0] == 0xEB){
+//
+//				  inv2_bus_voltage = RxMsg.Data[2] << 8;
+//				  inv2_bus_voltage += RxMsg.Data[1];
+//
+//
+//			  }
+//
+//		  }
 
-		  bus_voltage = inv1_bus_voltage + inv2_bus_voltage;
+		  bus_voltage = (inv1_bus_voltage + inv2_bus_voltage) / 2;
 		  bus_voltage = bus_voltage / 31.499;
 		  if(bus_voltage > pack_v * 0.000088){
 
@@ -370,24 +394,24 @@ int main(void)
 			  hcan.pTxMsg = &TxMsg;
 			  HAL_CAN_Transmit(&hcan, 10);
 		  }
-		  if(__HAL_TIM_GET_COUNTER(&htim6) > 30000){
+		  if(++precharge_timer > 450){
 
  			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_RESET);
- 			  HAL_TIM_Base_Stop(&htim6);
+ 			  precharge = 1;
 
 		  }
 
 	  }
 
 	  hcan.pRxMsg = &RxMsg;
-	  if(HAL_CAN_Receive(&hcan,CAN_FIFO0, 1) == HAL_OK){
+	  if(HAL_CAN_Receive(&hcan,CAN_FIFO1, 1) == HAL_OK){
 
 		  if(RxMsg.StdId == 0x55 && RxMsg.Data[0] == 0x0A && RxMsg.Data[1] == 0x00){
 
 			  //TS ON procedure with delay as pre-charge control
 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
 			  precharge = 0;
-			  HAL_TIM_Base_Start(&htim6);
+			  precharge_timer = 0;
 		  }
 		  else if(RxMsg.StdId == 0x55 && RxMsg.Data[0] == 0x0A && RxMsg.Data[1] == 0x01){
 
@@ -397,22 +421,23 @@ int main(void)
 		 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_SET);
 		 			  HAL_Delay(1);
 		 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_RESET);
-		 			  TxMsg.IDE = CAN_ID_STD;
-		 			  TxMsg.RTR = CAN_RTR_DATA;
-		 			  TxMsg.DLC = 8;
-		 			  TxMsg.StdId = 0xAA;
-		 			  TxMsg.Data[0] = 0x03;
-		 			  TxMsg.Data[1] = 0x00;
-		 			  TxMsg.Data[2] = 0x00;
-		 			  TxMsg.Data[3] = 0x00;
-		 			  TxMsg.Data[4] = 0x00;
-		 			  TxMsg.Data[5] = 0x00;
-		 			  TxMsg.Data[6] = 0x00;
-		 			  TxMsg.Data[7] = 0x00;
-		 			  hcan.pTxMsg = &TxMsg;
-		 			  HAL_CAN_Transmit(&hcan, 10);
+					  TxMsg.IDE = CAN_ID_STD;
+					  TxMsg.RTR = CAN_RTR_DATA;
+					  TxMsg.DLC = 8;
+					  TxMsg.StdId = 0xAA;
+					  TxMsg.Data[0] = 0x03;
+					  TxMsg.Data[1] = 0x00;
+					  TxMsg.Data[2] = 0x00;
+					  TxMsg.Data[3] = 0x00;
+					  TxMsg.Data[4] = 0x00;
+					  TxMsg.Data[5] = 0x00;
+					  TxMsg.Data[6] = 0x00;
+					  TxMsg.Data[7] = 0x00;
+					  hcan.pTxMsg = &TxMsg;
+					  HAL_CAN_Transmit(&hcan, 10);
 
-		 		  }
+
+		  }
 		  else if(RxMsg.StdId == 0x55 && RxMsg.Data[0] == 0x0B){
 
 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_RESET);
@@ -438,12 +463,12 @@ int main(void)
 
 	  			TxMsg.StdId = 0xAB;
 				TxMsg.Data[0] = i;
-				TxMsg.Data[1] = (uint8_t) cell_voltages[i][0]/200;
-				TxMsg.Data[2] = (uint8_t) cell_temperatures[i][0]/20;
-				TxMsg.Data[3] = (uint8_t) cell_voltages[i+1][0]/200;
-				TxMsg.Data[4] =  (uint8_t) cell_temperatures[i+1][0]/20;
-				TxMsg.Data[5] = (uint8_t) cell_voltages[i+2][0]/200;
-				TxMsg.Data[6] =  (uint8_t) cell_temperatures[i+2][0]/20;
+				TxMsg.Data[1] = (uint8_t) (cell_voltages[i][0] / 200);
+				TxMsg.Data[2] = (uint8_t) (cell_temperatures[i][0] / 20);
+				TxMsg.Data[3] = (uint8_t) (cell_voltages[i+1][0] / 200);
+				TxMsg.Data[4] =  (uint8_t) (cell_temperatures[i+1][0] / 20);
+				TxMsg.Data[5] = (uint8_t) (cell_voltages[i+2][0] / 200);
+				TxMsg.Data[6] =  (uint8_t) (cell_temperatures[i+2][0] / 20);
 				TxMsg.Data[7] = 0;
 
 				hcan.pTxMsg = &TxMsg;
@@ -455,15 +480,6 @@ int main(void)
 		  }
 
 	  }
-
-	  	  	  for(int i=0;i<108;i++){
-	  	  		 cell_voltages_vector[i]=cell_voltages[i][0];
-	  	  		  }
-	  	  	  for(int i=0;i<108;i++){
-	  	  		  		 cell_temperatures_vector[i]=cell_temperatures[i][0];
-	  	  		  		  }
-
-
 
 
   /* USER CODE END WHILE */
@@ -649,6 +665,21 @@ static void MX_TIM6_Init(void)
 
 }
 
+/** 
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void) 
+{
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Channel1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
+
+}
+
 /** Configure pins as 
         * Analog 
         * Input 
@@ -681,7 +712,7 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin : ShutDownStatus_Pin */
   GPIO_InitStruct.Pin = ShutDownStatus_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(ShutDownStatus_GPIO_Port, &GPIO_InitStruct);
 
 }
