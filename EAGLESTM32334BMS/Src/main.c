@@ -49,6 +49,7 @@
 #define TOT_IC 12 // number of daisy chain
 #define CELL_CH 9
 CAN_FilterConfTypeDef tsONfilter;
+CAN_FilterConfTypeDef invfilter;
 CanRxMsgTypeDef RxMsg;
 CanTxMsgTypeDef TxMsg;
 
@@ -81,6 +82,11 @@ int32_t current;
 PackStateTypeDef state = PACK_OK;
 uint8_t fault_counter = 0;
 uint8_t BMS_status = 0;
+uint8_t precharge;
+uint8_t eb[2];
+int16_t inv1_bus_voltage;
+int16_t inv2_bus_voltage;
+int32_t bus_voltage;
 int counterCicle = 0;
 
 /* USER CODE END PV */
@@ -147,8 +153,21 @@ int main(void)
   tsONfilter.FilterActivation = ENABLE;
   HAL_CAN_ConfigFilter(&hcan, &tsONfilter);
 
+  invfilter.FilterMode = CAN_FILTERMODE_IDLIST;
+  invfilter.FilterIdLow = 0x181 << 5;
+  invfilter.FilterIdHigh = 0x182 << 5;
+  invfilter.FilterMaskIdHigh = 0x181 << 5;
+  invfilter.FilterMaskIdLow = 0x182 << 5;
+  invfilter.FilterFIFOAssignment = CAN_FILTER_FIFO1;
+  invfilter.BankNumber = 1;
+  invfilter.FilterScale  = CAN_FILTERSCALE_16BIT;
+  invfilter.FilterActivation = ENABLE;
+  HAL_CAN_ConfigFilter(&hcan, &invfilter);
+
   // BMS Status OFF
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
+  precharge = 0;
+
 
   // First cell  reads
   // Voltages
@@ -281,34 +300,108 @@ int main(void)
 	  hcan.pTxMsg = &TxMsg;
 	  HAL_CAN_Transmit(&hcan, 10);
 
+	  if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_6) == GPIO_PIN_SET && precharge == 0){
+
+		  //inverter1 bus voltage request
+		  TxMsg.IDE = CAN_ID_STD;
+		  TxMsg.RTR = CAN_RTR_DATA;
+		  TxMsg.DLC = 3;
+		  TxMsg.StdId = 0x201;
+		  TxMsg.Data[0] = 0x3D;
+		  TxMsg.Data[1] = 0xEB;
+		  TxMsg.Data[2] = 0x00;
+		  hcan.pTxMsg = &TxMsg;
+		  HAL_CAN_Transmit(&hcan, 10);
+
+		  //inverter2 bus voltage request
+		  TxMsg.IDE = CAN_ID_STD;
+		  TxMsg.RTR = CAN_RTR_DATA;
+		  TxMsg.DLC = 3;
+		  TxMsg.StdId = 0x202;
+		  TxMsg.Data[0] = 0x3D;
+		  TxMsg.Data[1] = 0xEB;
+		  TxMsg.Data[2] = 0x00;
+		  hcan.pTxMsg = &TxMsg;
+		  HAL_CAN_Transmit(&hcan, 10);
+
+		  if(HAL_CAN_Receive(&hcan,CAN_FIFO1, 1) == HAL_OK){
+
+			  if(RxMsg.StdId == 0x181 && RxMsg.Data[0] == 0xEB){
+
+				  eb[0] = RxMsg.Data[2];
+				  eb[1] = RxMsg.Data[1];
+				  memcpy(&inv1_bus_voltage, eb, 2);
+
+			  }
+			  if(RxMsg.StdId == 0x182 && RxMsg.Data[0] == 0xEB){
+
+				  eb[0] = RxMsg.Data[2];
+				  eb[1] = RxMsg.Data[1];
+				  memcpy(&inv2_bus_voltage, eb, 2);
+
+			  }
+			  bus_voltage = inv1_bus_voltage + inv2_bus_voltage;
+			  bus_voltage = bus_voltage / 31.499;
+			  if(bus_voltage > pack_v * 0.000088){
+
+				  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_SET);
+				  HAL_Delay(1);
+				  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_RESET);
+				  precharge = 1;
+				  TxMsg.IDE = CAN_ID_STD;
+				  TxMsg.RTR = CAN_RTR_DATA;
+				  TxMsg.DLC = 8;
+				  TxMsg.StdId = 0xAA;
+				  TxMsg.Data[0] = 0x03;
+				  TxMsg.Data[1] = 0x00;
+				  TxMsg.Data[2] = 0x00;
+				  TxMsg.Data[3] = 0x00;
+				  TxMsg.Data[4] = 0x00;
+				  TxMsg.Data[5] = 0x00;
+				  TxMsg.Data[6] = 0x00;
+				  TxMsg.Data[7] = 0x00;
+				  hcan.pTxMsg = &TxMsg;
+				  HAL_CAN_Transmit(&hcan, 10);
+			  }
+
+		  }
+
+	  }
 
 	  hcan.pRxMsg = &RxMsg;
 	  if(HAL_CAN_Receive(&hcan,CAN_FIFO0, 1) == HAL_OK){
 
-		  if(RxMsg.StdId == 0x55 && RxMsg.Data[0] == 0x0A){
+		  if(RxMsg.StdId == 0x55 && RxMsg.Data[0] == 0x0A && RxMsg.Data[1] == 0x00){
 
 			  //TS ON procedure with delay as pre-charge control
 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
-			  HAL_Delay(15000);
-			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_SET);
-			  HAL_Delay(1);
-			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_RESET);
-			  TxMsg.IDE = CAN_ID_STD;
-			  TxMsg.RTR = CAN_RTR_DATA;
-			  TxMsg.DLC = 8;
-			  TxMsg.StdId = 0xAA;
-			  TxMsg.Data[0] = 0x03;
-			  TxMsg.Data[1] = 0x00;
-			  TxMsg.Data[2] = 0x00;
-			  TxMsg.Data[3] = 0x00;
-			  TxMsg.Data[4] = 0x00;
-			  TxMsg.Data[5] = 0x00;
-			  TxMsg.Data[6] = 0x00;
-			  TxMsg.Data[7] = 0x00;
-			  hcan.pTxMsg = &TxMsg;
-			  HAL_CAN_Transmit(&hcan, 10);
+			  precharge = 0;
 
 		  }
+		  else if(RxMsg.StdId == 0x55 && RxMsg.Data[0] == 0x0A && RxMsg.Data[1] == 0x01){
+
+		 			  //TS ON procedure with delay as pre-charge control
+		 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
+		 			  HAL_Delay(15000);
+		 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_SET);
+		 			  HAL_Delay(1);
+		 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_RESET);
+		 			  TxMsg.IDE = CAN_ID_STD;
+		 			  TxMsg.RTR = CAN_RTR_DATA;
+		 			  TxMsg.DLC = 8;
+		 			  TxMsg.StdId = 0xAA;
+		 			  TxMsg.Data[0] = 0x03;
+		 			  TxMsg.Data[1] = 0x00;
+		 			  TxMsg.Data[2] = 0x00;
+		 			  TxMsg.Data[3] = 0x00;
+		 			  TxMsg.Data[4] = 0x00;
+		 			  TxMsg.Data[5] = 0x00;
+		 			  TxMsg.Data[6] = 0x00;
+		 			  TxMsg.Data[7] = 0x00;
+		 			  hcan.pTxMsg = &TxMsg;
+		 			  HAL_CAN_Transmit(&hcan, 10);
+
+		 		  }
 		  else if(RxMsg.StdId == 0x55 && RxMsg.Data[0] == 0x0B){
 
 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_RESET);
