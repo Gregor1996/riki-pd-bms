@@ -255,6 +255,7 @@ int main(void)
 	  avg_c = avg_c / 15;
 
 	  state = status(cell_voltages, cell_temperatures, &pack_v, &min_v, &max_v, &avg_v, &max_t, &avg_t, &current, &TxMsg);
+
 	  if(state == PACK_OK){
 
 		  fault_counter = 0;
@@ -282,6 +283,7 @@ int main(void)
 
 
 	  }
+
 	  // Send pack data via CAN
 	  TxMsg.IDE = CAN_ID_STD;
 	  TxMsg.RTR = CAN_RTR_DATA;
@@ -357,8 +359,27 @@ int main(void)
 
 		  }
 
+		  if(HAL_CAN_Receive(&hcan,CAN_FIFO0, 1) == HAL_OK){
+
+			  if(RxMsg.StdId == 0x181 && RxMsg.Data[0] == 0xEB){
+
+				  inv1_bus_voltage = RxMsg.Data[2] << 8;
+				  inv1_bus_voltage += RxMsg.Data[1];
+
+			  }
+			  if(RxMsg.StdId == 0x182 && RxMsg.Data[0] == 0xEB){
+
+				  inv2_bus_voltage = RxMsg.Data[2] << 8;
+				  inv2_bus_voltage += RxMsg.Data[1];
+
+
+			  }
+
+		  }
+
 		  bus_voltage = (inv1_bus_voltage + inv2_bus_voltage) / 2;
 		  bus_voltage = bus_voltage / 31.499;
+
 		  if(bus_voltage > pack_v * 0.000085){
 
 			  HAL_Delay(3000);
@@ -403,7 +424,7 @@ int main(void)
 	  hcan.pRxMsg = &RxMsg;
 	  if(HAL_CAN_Receive(&hcan,CAN_FIFO0, 1) == HAL_OK){
 
-		  if(RxMsg.StdId == 0x55 && RxMsg.Data[0] == 0x0A && RxMsg.Data[1] == 0x00){
+		  if(RxMsg.StdId == 0x55 && RxMsg.Data[0] == 0x0A && RxMsg.Data[1] == 0x00){  //IF BYTE2 ==0 PRECHARGE CON CONTROLLO INVERTER
 
 			  //TS ON procedure with delay as pre-charge control
 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
@@ -423,7 +444,7 @@ int main(void)
 			  HAL_CAN_ConfigFilter(&hcan, &tsONfilter);
 
 		  }
-		  else if(RxMsg.StdId == 0x55 && RxMsg.Data[0] == 0x0A && RxMsg.Data[1] == 0x01){
+		  else if(RxMsg.StdId == 0x55 && RxMsg.Data[0] == 0x0A && RxMsg.Data[1] == 0x01){  ////IF BYTE2 ==0 PRECHARGE CON 15 SEC
 
 		 			  //TS ON procedure with delay as pre-charge control
 		 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
@@ -451,6 +472,7 @@ int main(void)
 		  else if(RxMsg.StdId == 0x55 && RxMsg.Data[0] == 0x0B){
 
 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_RESET);
+			  precharge = 1;
 			  TxMsg.IDE = CAN_ID_STD;
 			  TxMsg.RTR = CAN_RTR_DATA;
 			  TxMsg.DLC = 8;
