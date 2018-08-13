@@ -159,21 +159,10 @@ int main(void)
   tsONfilter.FilterIdHigh = 0xA8 << 5;
   tsONfilter.FilterMaskIdHigh = 0x55 << 5;
   tsONfilter.FilterMaskIdLow = 0x55 << 5;
-  tsONfilter.FilterFIFOAssignment = CAN_FILTER_FIFO1;
+  tsONfilter.FilterFIFOAssignment = CAN_FILTER_FIFO0;
   tsONfilter.FilterScale  = CAN_FILTERSCALE_16BIT;
   tsONfilter.FilterActivation = ENABLE;
   HAL_CAN_ConfigFilter(&hcan, &tsONfilter);
-
-  invfilter.FilterNumber = 1;
-  invfilter.FilterMode = CAN_FILTERMODE_IDLIST;
-  invfilter.FilterIdLow = 0x181 << 5;
-  invfilter.FilterIdHigh = 0x182 << 5;
-  invfilter.FilterMaskIdHigh = 0x181 << 5;
-  invfilter.FilterMaskIdLow = 0x182 << 5;
-  invfilter.FilterFIFOAssignment = CAN_FILTER_FIFO0;
-  invfilter.FilterScale  = CAN_FILTERSCALE_16BIT;
-  invfilter.FilterActivation = ENABLE;
-  HAL_CAN_ConfigFilter(&hcan, &invfilter);
 
   // BMS Status OFF
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
@@ -350,35 +339,43 @@ int main(void)
 		  HAL_CAN_Transmit(&hcan, 10);
 
 		  hcan.pRxMsg = &RxMsg;
-		  if(HAL_CAN_Receive(&hcan,CAN_FIFO0, 10) == HAL_OK){
+		  if(HAL_CAN_Receive(&hcan,CAN_FIFO0, 1) == HAL_OK){
 
-			  HAL_Delay(1000);
+			  if(RxMsg.StdId == 0x181 && RxMsg.Data[0] == 0xEB){
+
+				  inv1_bus_voltage = RxMsg.Data[2] << 8;
+				  inv1_bus_voltage += RxMsg.Data[1];
+
+			  }
+			  if(RxMsg.StdId == 0x182 && RxMsg.Data[0] == 0xEB){
+
+				  inv2_bus_voltage = RxMsg.Data[2] << 8;
+				  inv2_bus_voltage += RxMsg.Data[1];
+
+
+			  }
+
 		  }
-//
-//			  if(RxMsg.StdId == 0x181 && RxMsg.Data[0] == 0xEB){
-//
-//				  inv1_bus_voltage = RxMsg.Data[2] << 8;
-//				  inv1_bus_voltage += RxMsg.Data[1];
-//
-//			  }
-//			  if(RxMsg.StdId == 0x182 && RxMsg.Data[0] == 0xEB){
-//
-//				  inv2_bus_voltage = RxMsg.Data[2] << 8;
-//				  inv2_bus_voltage += RxMsg.Data[1];
-//
-//
-//			  }
-//
-//		  }
 
 		  bus_voltage = (inv1_bus_voltage + inv2_bus_voltage) / 2;
 		  bus_voltage = bus_voltage / 31.499;
-		  if(bus_voltage > pack_v * 0.000088){
+		  if(bus_voltage > pack_v * 0.000085){
 
+			  HAL_Delay(3000);
 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_SET);
 			  HAL_Delay(1);
 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_RESET);
 			  precharge = 1;
+			  tsONfilter.FilterNumber = 0;
+			  tsONfilter.FilterMode = CAN_FILTERMODE_IDLIST;
+			  tsONfilter.FilterIdLow = 0x55 << 5;
+			  tsONfilter.FilterIdHigh = 0xA8 << 5;
+			  tsONfilter.FilterMaskIdHigh = 0x55 << 5;
+			  tsONfilter.FilterMaskIdLow = 0x55 << 5;
+			  tsONfilter.FilterFIFOAssignment = CAN_FILTER_FIFO0;
+			  tsONfilter.FilterScale  = CAN_FILTERSCALE_16BIT;
+			  tsONfilter.FilterActivation = ENABLE;
+			  HAL_CAN_ConfigFilter(&hcan, &tsONfilter);
 			  TxMsg.IDE = CAN_ID_STD;
 			  TxMsg.RTR = CAN_RTR_DATA;
 			  TxMsg.DLC = 8;
@@ -404,7 +401,7 @@ int main(void)
 	  }
 
 	  hcan.pRxMsg = &RxMsg;
-	  if(HAL_CAN_Receive(&hcan,CAN_FIFO1, 1) == HAL_OK){
+	  if(HAL_CAN_Receive(&hcan,CAN_FIFO0, 1) == HAL_OK){
 
 		  if(RxMsg.StdId == 0x55 && RxMsg.Data[0] == 0x0A && RxMsg.Data[1] == 0x00){
 
@@ -412,6 +409,19 @@ int main(void)
 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
 			  precharge = 0;
 			  precharge_timer = 0;
+			  inv1_bus_voltage = 0;
+			  inv2_bus_voltage = 0;
+			  tsONfilter.FilterNumber = 0;
+			  tsONfilter.FilterMode = CAN_FILTERMODE_IDLIST;
+			  tsONfilter.FilterIdLow = 0x55 << 5;
+			  tsONfilter.FilterIdHigh = 0xA8 << 5;
+			  tsONfilter.FilterMaskIdHigh = 0x181 << 5;
+			  tsONfilter.FilterMaskIdLow = 0x182 << 5;
+			  tsONfilter.FilterFIFOAssignment = CAN_FILTER_FIFO0;
+			  tsONfilter.FilterScale  = CAN_FILTERSCALE_16BIT;
+			  tsONfilter.FilterActivation = ENABLE;
+			  HAL_CAN_ConfigFilter(&hcan, &tsONfilter);
+
 		  }
 		  else if(RxMsg.StdId == 0x55 && RxMsg.Data[0] == 0x0A && RxMsg.Data[1] == 0x01){
 
