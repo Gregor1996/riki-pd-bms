@@ -1,7 +1,7 @@
 [PreviousGenFiles]
-HeaderPath=C:/Users/docdo/Documents/EAGLESTM32334BMS/Inc
+HeaderPath=C:/Users/Utente/Documents/GitHub/riki-pd-bms/EAGLESTM32334BMS/Inc
 HeaderFiles=stm32f3xx_it.h;stm32f3xx_hal_conf.h;main.h;
-SourcePath=C:/Users/docdo/Documents/EAGLESTM32334BMS/Src
+SourcePath=C:/Users/Utente/Documents/GitHub/riki-pd-bms/EAGLESTM32334BMS/Src
 SourceFiles=stm32f3xx_it.c;stm32f3xx_hal_msp.c;main.c;
 
 [PreviousLibFiles]

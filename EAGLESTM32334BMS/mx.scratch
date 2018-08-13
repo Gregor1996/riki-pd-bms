@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Project>
-<ProjectName>C:\Users\docdo\Documents\EAGLESTM32334BMS\\EAGLESTM32334BMS</ProjectName>
+<ProjectName>C:\Users\Utente\Documents\GitHub\riki-pd-bms\EAGLESTM32334BMS\\EAGLESTM32334BMS</ProjectName>
 <ProjectNature>C</ProjectNature> 
 <CMSIS>..\Drivers\CMSIS</CMSIS>
-<HAL_Driver>C:\Users\docdo\STM32Cube\Repository\STM32Cube_FW_F3_V1.9.1\Drivers\CMSIS</HAL_Driver>
+<HAL_Driver>C:\Users\Utente\STM32Cube\Repository\STM32Cube_FW_F3_V1.9.1\Drivers\CMSIS</HAL_Driver>
 <Toolchain>SW4STM32</Toolchain>
 <Version>0</Version>
 

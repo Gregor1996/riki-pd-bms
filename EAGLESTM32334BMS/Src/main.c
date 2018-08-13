@@ -62,6 +62,8 @@ CAN_HandleTypeDef hcan;
 
 SPI_HandleTypeDef hspi1;
 
+TIM_HandleTypeDef htim6;
+
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
 
@@ -97,6 +99,7 @@ static void MX_GPIO_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_CAN_Init(void);
+static void MX_TIM6_Init(void);
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
@@ -139,6 +142,7 @@ int main(void)
   MX_SPI1_Init();
   MX_ADC1_Init();
   MX_CAN_Init();
+  MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
 
   // CAN FIlter Initialization
@@ -340,29 +344,36 @@ int main(void)
 				  memcpy(&inv2_bus_voltage, eb, 2);
 
 			  }
-			  bus_voltage = inv1_bus_voltage + inv2_bus_voltage;
-			  bus_voltage = bus_voltage / 31.499;
-			  if(bus_voltage > pack_v * 0.000088){
 
-				  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_SET);
-				  HAL_Delay(1);
-				  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_RESET);
-				  precharge = 1;
-				  TxMsg.IDE = CAN_ID_STD;
-				  TxMsg.RTR = CAN_RTR_DATA;
-				  TxMsg.DLC = 8;
-				  TxMsg.StdId = 0xAA;
-				  TxMsg.Data[0] = 0x03;
-				  TxMsg.Data[1] = 0x00;
-				  TxMsg.Data[2] = 0x00;
-				  TxMsg.Data[3] = 0x00;
-				  TxMsg.Data[4] = 0x00;
-				  TxMsg.Data[5] = 0x00;
-				  TxMsg.Data[6] = 0x00;
-				  TxMsg.Data[7] = 0x00;
-				  hcan.pTxMsg = &TxMsg;
-				  HAL_CAN_Transmit(&hcan, 10);
-			  }
+		  }
+
+		  bus_voltage = inv1_bus_voltage + inv2_bus_voltage;
+		  bus_voltage = bus_voltage / 31.499;
+		  if(bus_voltage > pack_v * 0.000088){
+
+			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_SET);
+			  HAL_Delay(1);
+			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_RESET);
+			  precharge = 1;
+			  TxMsg.IDE = CAN_ID_STD;
+			  TxMsg.RTR = CAN_RTR_DATA;
+			  TxMsg.DLC = 8;
+			  TxMsg.StdId = 0xAA;
+			  TxMsg.Data[0] = 0x03;
+			  TxMsg.Data[1] = 0x00;
+			  TxMsg.Data[2] = 0x00;
+			  TxMsg.Data[3] = 0x00;
+			  TxMsg.Data[4] = 0x00;
+			  TxMsg.Data[5] = 0x00;
+			  TxMsg.Data[6] = 0x00;
+			  TxMsg.Data[7] = 0x00;
+			  hcan.pTxMsg = &TxMsg;
+			  HAL_CAN_Transmit(&hcan, 10);
+		  }
+		  if(__HAL_TIM_GET_COUNTER(&htim6) > 30000){
+
+ 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_RESET);
+ 			  HAL_TIM_Base_Stop(&htim6);
 
 		  }
 
@@ -376,7 +387,7 @@ int main(void)
 			  //TS ON procedure with delay as pre-charge control
 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
 			  precharge = 0;
-
+			  HAL_TIM_Base_Start(&htim6);
 		  }
 		  else if(RxMsg.StdId == 0x55 && RxMsg.Data[0] == 0x0A && RxMsg.Data[1] == 0x01){
 
@@ -615,6 +626,31 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
   hspi1.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
   if (HAL_SPI_Init(&hspi1) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+}
+
+/* TIM6 init function */
+static void MX_TIM6_Init(void)
+{
+
+  TIM_MasterConfigTypeDef sMasterConfig;
+
+  htim6.Instance = TIM6;
+  htim6.Init.Prescaler = 32000;
+  htim6.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim6.Init.Period = 0;
+  htim6.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim6) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim6, &sMasterConfig) != HAL_OK)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
