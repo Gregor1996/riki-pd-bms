@@ -51,6 +51,7 @@
 CAN_FilterConfTypeDef tsONfilter;
 CanRxMsgTypeDef RxMsg;
 CanTxMsgTypeDef TxMsg;
+
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
@@ -65,9 +66,9 @@ SPI_HandleTypeDef hspi1;
 
 uint16_t cell_voltages[108][2];
 uint16_t cell_voltages_vector[108];
-
 uint16_t cell_temperatures[108][2];
 uint16_t cell_temperatures_vector[108];
+
 uint16_t min_v;
 uint16_t max_v;
 uint16_t avg_v;
@@ -75,12 +76,13 @@ uint32_t pack_v;
 uint16_t max_t;
 uint16_t avg_t;
 uint8_t parity = 0;
+uint32_t adcCurrent[512];
+int32_t current;
 PackStateTypeDef state = PACK_OK;
 uint8_t fault_counter = 0;
 uint8_t BMS_status = 0;
 int counterCicle = 0;
-int counterCicle_Tech=0;
-int var=0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -177,6 +179,8 @@ int main(void)
   cell_temperatures[91][0]=(cell_temperatures[92][0]+cell_temperatures[93][0])/2;
   cell_temperatures[90][1]=0;
   cell_temperatures[91][1]=0;
+  //Start current measuring
+  HAL_ADC_Start_DMA(&hadc1, adcCurrent, 512);
 
   /* USER CODE END 2 */
 
@@ -211,7 +215,13 @@ int main(void)
 	  cell_temperatures[90][1]=0;
 	  cell_temperatures[91][1]=0;
 
-	  state = status(cell_voltages, cell_temperatures, &pack_v, &min_v, &max_v, &avg_v, &max_t, &avg_t);
+	  //Current
+	  current = 0;
+	  for(int i = 0; i < 512; i++)
+		  current += adcCurrent[i];
+	  current = (current/512 - 2541) * 10 * 256 / 33;
+
+	  state = status(cell_voltages, cell_temperatures, &pack_v, &min_v, &max_v, &avg_v, &max_t, &avg_t, &current, &TxMsg);
 	  if(state == PACK_OK){
 
 		  fault_counter = 0;
@@ -226,68 +236,13 @@ int main(void)
 	  }
 	  else{
 		  fault_counter++;
-		  if(state == OVER_VOLTAGE || state == UNDER_VOLTAGE || state == DATA_NOT_UPDATED){
-
-			  //CAN message indicating a voltage fault
-			  TxMsg.IDE = CAN_ID_STD;
-			  TxMsg.RTR = CAN_RTR_DATA;
-			  TxMsg.DLC = 8;
-			  TxMsg.StdId = 0xAA;
-			  TxMsg.Data[0] = 0x08;
-			  TxMsg.Data[1] = 0x02;
-			  TxMsg.Data[2] = 0x00;
-			  TxMsg.Data[3] = 0x00;
-			  TxMsg.Data[4] = 0x00;
-			  TxMsg.Data[5] = 0x00;
-			  TxMsg.Data[6] = 0x00;
-			  TxMsg.Data[7] = 0x00;
-			  hcan.pTxMsg = &TxMsg;
-
-		  }
-		  else if(state == OVER_TEMPERATURE){
-
-			  //CAN message indicating a cell temperature fault
-			  TxMsg.IDE = CAN_ID_STD;
-			  TxMsg.RTR = CAN_RTR_DATA;
-			  TxMsg.DLC = 8;
-			  TxMsg.StdId = 0xAA;
-			  TxMsg.Data[0] = 0x08;
-			  TxMsg.Data[1] = 0x03;
-			  TxMsg.Data[2] = 0x00;
-			  TxMsg.Data[3] = 0x00;
-			  TxMsg.Data[4] = 0x00;
-			  TxMsg.Data[5] = 0x00;
-			  TxMsg.Data[6] = 0x00;
-			  TxMsg.Data[7] = 0x00;
-			  hcan.pTxMsg = &TxMsg;
-			  HAL_CAN_Transmit(&hcan, 10);
-
-		  }
-		  else if(state == PACK_OVER_TEMPERATURE){
-
-			  //CAN message indicating a pack temperature fault
-			  TxMsg.IDE = CAN_ID_STD;
-			  TxMsg.RTR = CAN_RTR_DATA;
-			  TxMsg.DLC = 8;
-			  TxMsg.StdId = 0xAA;
-			  TxMsg.Data[0] = 0x08;
-			  TxMsg.Data[1] = 0x04;
-			  TxMsg.Data[2] = 0x00;
-			  TxMsg.Data[3] = 0x00;
-			  TxMsg.Data[4] = 0x00;
-			  TxMsg.Data[5] = 0x00;
-			  TxMsg.Data[6] = 0x00;
-			  TxMsg.Data[7] = 0x00;
-			  hcan.pTxMsg = &TxMsg;
-			  HAL_CAN_Transmit(&hcan, 10);
-
-		  }
 		  if(fault_counter > 15){
 
 			  //Set the BMS to fault
 			  BMS_status = 0;
 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
 			  //Sends the error message indicating the fault and the TS OFF
+			  hcan.pTxMsg = &TxMsg;
 			  HAL_CAN_Transmit(&hcan, 10);
 
 		  }
@@ -309,6 +264,23 @@ int main(void)
 	  TxMsg.Data[7] = (uint8_t) (max_t);
 	  hcan.pTxMsg = &TxMsg;
 	  HAL_CAN_Transmit(&hcan, 10);
+
+	  // Send current data via CAN
+	  TxMsg.IDE = CAN_ID_STD;
+	  TxMsg.RTR = CAN_RTR_DATA;
+	  TxMsg.DLC = 8;
+	  TxMsg.StdId = 0x05;
+	  TxMsg.Data[0] = 0x02;
+	  TxMsg.Data[1] = (int8_t) current;
+	  TxMsg.Data[2] = 0;
+	  TxMsg.Data[3] = 0;
+	  TxMsg.Data[4] = 0;
+	  TxMsg.Data[5] = 0;
+	  TxMsg.Data[6] = 0;
+	  TxMsg.Data[7] = 0;
+	  hcan.pTxMsg = &TxMsg;
+	  HAL_CAN_Transmit(&hcan, 10);
+
 
 	  hcan.pRxMsg = &RxMsg;
 	  if(HAL_CAN_Receive(&hcan,CAN_FIFO0, 1) == HAL_OK){
@@ -356,92 +328,39 @@ int main(void)
 			  HAL_CAN_Transmit(&hcan, 10);
 
 		  }
+		  else if(RxMsg.StdId == 0xA8){
 
+	  		  for(uint8_t i=0;i<108;i+=3){
+
+	  			TxMsg.StdId = 0xAB;
+				TxMsg.Data[0] = i;
+				TxMsg.Data[1] = (uint8_t) cell_voltages[i][0]/200;
+				TxMsg.Data[2] = (uint8_t) cell_temperatures[i][0]/20;
+				TxMsg.Data[3] = (uint8_t) cell_voltages[i+1][0]/200;
+				TxMsg.Data[4] =  (uint8_t) cell_temperatures[i+1][0]/20;
+				TxMsg.Data[5] = (uint8_t) cell_voltages[i+2][0]/200;
+				TxMsg.Data[6] =  (uint8_t) cell_temperatures[i+2][0]/20;
+				TxMsg.Data[7] = 0;
+
+				hcan.pTxMsg = &TxMsg;
+				HAL_CAN_Transmit(&hcan, 10);
+				HAL_Delay(10);
+
+	  		  }
+
+		  }
 
 	  }
-
-
-
-
-	  //		uint32_t sum=0;
-	  //	  	  for(int i=0;i<512;i++){
-	  //	   	HAL_ADC_Start_DMA(&hadc1, (uint32_t*) adcBuffer[i], 1); // Call DMA for ADC1
-	  //
-	  //	   	HAL_Delay(20); // Wait for conversion
-	  //	   	sum=sum+adcBuffer[i];
-	  //	   	HAL_ADC_Stop_DMA(&hadc1);
-	  //	   	uint32_t Current = Get_Amps_Value(adcBuffer[i],(uint16_t)2.048);
-	  //
-	  //	  	  }
-	  //
-	  if(HAL_CAN_Receive(&hcan,CAN_FIFO0, 1) == 0xA8){   //da concordare con PILOTAPAZZO
-
-	  	  // Send all Voltages and Temperatures data via CAN
-	  	  //remove 2nd dimension for can
 
 	  	  	  for(int i=0;i<108;i++){
 	  	  		 cell_voltages_vector[i]=cell_voltages[i][0];
 	  	  		  }
 	  	  	  for(int i=0;i<108;i++){
-	  	  		  		 cell_temperatures_vector[i]=cell_voltages[i][0];
+	  	  		  		 cell_temperatures_vector[i]=cell_temperatures[i][0];
 	  	  		  		  }
 
 
-	  	      TxMsg.IDE = CAN_ID_STD;
-	  		  TxMsg.RTR = CAN_RTR_DATA;
-	  		  TxMsg.DLC = 8;
 
-	  		  for(int i=0;i<216;i=i+4){
-
-	  			  if(i<108){
-	  				TxMsg.StdId = 0xAB;
-	  		  TxMsg.Data[0] = (uint8_t) (cell_voltages_vector[i]>>16) ;
-	  		  TxMsg.Data[1] = (uint8_t) (cell_voltages_vector[i]  >> 8);
-	  		  TxMsg.Data[2] = (uint8_t) (cell_voltages_vector[i+1]  >> 16);
-	  		  TxMsg.Data[3] = (uint8_t) (cell_voltages_vector[i+1] >> 8 );
-	  		  TxMsg.Data[4] = (uint8_t) (cell_voltages_vector[i+2]  >>16);
-	  		  TxMsg.Data[5] = (uint8_t) (cell_voltages_vector[i+2] >> 8 );
-	  		  TxMsg.Data[6] = (uint8_t) (cell_voltages_vector[i+3] >> 16);
-	  		  TxMsg.Data[7] = (uint8_t) (cell_voltages_vector[i+3]  >>8);
-	  			  }
-	  			  else if(i >= 108) {
-
-	  				TxMsg.StdId = 0xAC;
-	  				 TxMsg.Data[0] = (uint8_t) (cell_temperatures_vector[i-108]>>16) ;
-	  				 TxMsg.Data[1] = (uint8_t) (cell_temperatures_vector[i-108]  >> 8);
-	  					  		 		  TxMsg.Data[2] = (uint8_t) (cell_temperatures_vector[i-108+1]  >> 16);
-	  					  		 		  TxMsg.Data[3] = (uint8_t) (cell_temperatures_vector[i-108+1] >> 8 );
-	  					  		 		  TxMsg.Data[4] = (uint8_t) (cell_temperatures_vector[i-108+2]  >>16);
-	  					  		 		  TxMsg.Data[5] = (uint8_t) (cell_temperatures_vector[i-108+2] >> 8 );
-	  					  		 		  TxMsg.Data[6] = (uint8_t) (cell_temperatures_vector[i-108+3] >> 16);
-	  					  		 		  TxMsg.Data[7] = (uint8_t) (cell_temperatures_vector[i-108+3]  >>8);
-	  			  }
-	  		  hcan.pTxMsg = &TxMsg;
-	  		  HAL_CAN_Transmit(&hcan, 10);
-	  		  HAL_Delay(10);
-
-
-	  		  }
-	  }
-//	  		  TxMsg.IDE = CAN_ID_STD;
-//	  		 		  TxMsg.RTR = CAN_RTR_DATA;
-//	  		 		  TxMsg.DLC = 8;
-//	  		 		  TxMsg.StdId = 0xAC;
-//
-//	  		 		  for(int i=0;i<27;i=i+4){
-//
-//	  		 		  TxMsg.Data[0] = 0x;
-//	  		 		  TxMsg.Data[1] = 0;
-//	  		 		  TxMsg.Data[2] = 0;
-//	  		 		  TxMsg.Data[3] = 0;
-//	  		 		  TxMsg.Data[4] = 0;
-//	  		 		  TxMsg.Data[5] = 0;
-//	  		 		  TxMsg.Data[6] = 0;
-//	  		 		  TxMsg.Data[7] = 0;
-//	  		 		  hcan.pTxMsg = &TxMsg;
-//	  		 		  HAL_CAN_Transmit(&hcan, 10);
-//
-//	  		 		  }
 
   /* USER CODE END WHILE */
 

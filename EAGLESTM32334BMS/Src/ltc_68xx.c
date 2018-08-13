@@ -106,6 +106,7 @@ void wakeup_idle(SPI_HandleTypeDef *hspi){
   * @param		Pointer to average voltage
   * @param		Pointer to maximum temperature
   * @param		Pointer to average temperature
+  * @param		Pointer to current
   * @retval		Battery status
   */
 PackStateTypeDef status(uint16_t cell_voltages[108][2],
@@ -115,16 +116,16 @@ PackStateTypeDef status(uint16_t cell_voltages[108][2],
 			   uint16_t* max_v,
 			   uint16_t* avg_v,
 			   uint16_t* max_t,
-			   uint16_t* avg_t){
+			   uint16_t* avg_t,
+			   int32_t* current,
+			   CanTxMsgTypeDef *TxMsg){
 
 	uint32_t sum_t = cell_temperatures[0][0];
 	*pack_v = cell_voltages[0][0];
 	*max_v = cell_voltages[0][0];
 	*min_v = cell_voltages[0][0];
 	*max_t = cell_temperatures[0][0];
-	if(cell_voltages[0][1] > 1000 || cell_temperatures[0][1] > 1000)
-				return DATA_NOT_UPDATED;
-	for(int i = 1; i < 108; i++){
+	for(int i = 0; i < 108; i++){
 
 		if(cell_voltages[i][0] > *max_v)
 			*max_v = cell_voltages[i][0];
@@ -134,19 +135,99 @@ PackStateTypeDef status(uint16_t cell_voltages[108][2],
 		if(cell_temperatures[i][0] > *max_t)
 			*max_t = cell_temperatures[i][0];
 		sum_t += cell_temperatures[i][0];
-		if(cell_voltages[1][1] > 1000 || cell_temperatures[i][1] > 1000)
+		if(cell_voltages[1][1] > 1000 || cell_temperatures[i][1] > 1000){
+
+			//CAN message indicating data not updated
+			TxMsg->IDE = CAN_ID_STD;
+			TxMsg->RTR = CAN_RTR_DATA;
+			TxMsg->DLC = 8;
+			TxMsg->StdId = 0xAA;
+			TxMsg->Data[0] = 0x08;
+			TxMsg->Data[1] = 0x02;
+			TxMsg->Data[2] = 0x00;
+			TxMsg->Data[3] = i;
+			TxMsg->Data[4] = (uint8_t) cell_voltages[i][0] >> 8;
+			TxMsg->Data[5] = (uint8_t) cell_voltages[i][0];
+			TxMsg->Data[6] = 0x00;
+			TxMsg->Data[7] = 0x00;
 			return DATA_NOT_UPDATED;
+
+		}
+		if(cell_voltages[i][0] < 25000){
+
+			//CAN message indicating under voltage fault
+			TxMsg->IDE = CAN_ID_STD;
+			TxMsg->RTR = CAN_RTR_DATA;
+			TxMsg->DLC = 8;
+			TxMsg->StdId = 0xAA;
+			TxMsg->Data[0] = 0x08;
+			TxMsg->Data[1] = 0x02;
+			TxMsg->Data[2] = 0x01;
+			TxMsg->Data[3] = i;
+			TxMsg->Data[4] = (uint8_t) cell_voltages[i][0] >> 8;
+			TxMsg->Data[5] = (uint8_t) cell_voltages[i][0];
+			TxMsg->Data[6] = (uint8_t) cell_temperatures[i][0] >> 8;
+			TxMsg->Data[7] = (uint8_t) cell_temperatures[i][0];
+			return UNDER_VOLTAGE;
+
+		}
+		if(cell_voltages[i][0] > 42250){
+
+			//CAN message indicating over voltage fault
+			TxMsg->IDE = CAN_ID_STD;
+			TxMsg->RTR = CAN_RTR_DATA;
+			TxMsg->DLC = 8;
+			TxMsg->StdId = 0xAA;
+			TxMsg->Data[0] = 0x08;
+			TxMsg->Data[1] = 0x02;
+			TxMsg->Data[2] = 0x02;
+			TxMsg->Data[3] = i;
+			TxMsg->Data[4] = (uint8_t) cell_voltages[i][0] >> 8;
+			TxMsg->Data[5] = (uint8_t) cell_voltages[i][0];
+			TxMsg->Data[6] = 0x00;
+			TxMsg->Data[7] = 0x00;
+			return OVER_VOLTAGE;
+
+		}
+		if(cell_temperatures[i][0] > 7000 || cell_temperatures[i][0] == 0 ){
+
+			//CAN message indicating over temperature fault
+			TxMsg->IDE = CAN_ID_STD;
+			TxMsg->RTR = CAN_RTR_DATA;
+			TxMsg->DLC = 8;
+			TxMsg->StdId = 0xAA;
+			TxMsg->Data[0] = 0x08;
+			TxMsg->Data[1] = 0x03;
+			TxMsg->Data[2] = 0x02;
+			TxMsg->Data[3] = i;
+			TxMsg->Data[4] = (uint8_t) cell_temperatures[i][0] >> 8;
+			TxMsg->Data[5] = (uint8_t) cell_temperatures[i][0];
+			TxMsg->Data[6] = 0x00;
+			TxMsg->Data[7] = 0x00;
+			return OVER_TEMPERATURE;
+
+		}
 	}
 	*avg_v = *pack_v / 108;
 	*avg_t = sum_t / 108;
-	if (*min_v < 28000)
-		return UNDER_VOLTAGE;
-	if (*max_v > 42250)
-		return OVER_VOLTAGE;
-	if (*max_t > 7000)
-		return OVER_TEMPERATURE;
-	if (*avg_t > 6500)
+	if (*avg_t > 6500){
+
+		//CAN message indicating a pack temperature fault
+		TxMsg->IDE = CAN_ID_STD;
+		TxMsg->RTR = CAN_RTR_DATA;
+		TxMsg->DLC = 8;
+		TxMsg->StdId = 0xAA;
+		TxMsg->Data[0] = 0x08;
+		TxMsg->Data[1] = 0x04;
+		TxMsg->Data[2] = (uint8_t) *avg_t >> 8;
+		TxMsg->Data[3] = (uint8_t) *avg_t;
+		TxMsg->Data[4] = 0x00;
+		TxMsg->Data[5] = 0x00;
+		TxMsg->Data[6] = 0x00;
+		TxMsg->Data[7] = 0x00;
 		return PACK_OVER_TEMPERATURE;
+
+	}
 	return PACK_OK;
 }
 

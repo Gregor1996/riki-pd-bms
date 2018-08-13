@@ -37,7 +37,9 @@ PackStateTypeDef status(uint16_t cell_voltages[108][2],
 			   uint16_t* max_v,
 			   uint16_t* avg_v,
 			   uint16_t* max_t,
-			   uint16_t* avg_t);
+			   uint16_t* avg_t,
+			   int32_t* current,
+			   CanTxMsgTypeDef *TxMsg);
 void ltc6804_rdcv_temp(uint8_t ic_n, uint8_t parity, uint16_t cell_temp[108][2],	SPI_HandleTypeDef *hspi);
 void ltc6804_rdcv_voltages(uint8_t ic_n, uint16_t cell_voltages[108][2],	SPI_HandleTypeDef *hspi);
 void ltc6804_command_temperatures(uint8_t start, uint8_t parity, SPI_HandleTypeDef *hspi);
