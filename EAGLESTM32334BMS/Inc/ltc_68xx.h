@@ -32,14 +32,12 @@ uint16_t convert_temp(uint16_t volt);
 void wakeup_idle(SPI_HandleTypeDef *hspi);
 PackStateTypeDef status(uint16_t cell_voltages[108][2],
 			   uint16_t cell_temperatures[108][2],
-			   uint32_t* pack_v,
-			   uint16_t* min_v,
-			   uint16_t* max_v,
-			   uint16_t* avg_v,
-			   uint16_t* max_t,
-			   uint16_t* avg_t,
-			   int32_t* current,
-			   CanTxMsgTypeDef *TxMsg);
+			   uint32_t *pack_v,
+			   uint16_t *pack_t,
+			   uint16_t *max_t,
+			   int32_t current,
+			   uint8_t *cell,
+			   uint16_t *value);
 void ltc6804_rdcv_temp(uint8_t ic_n, uint8_t parity, uint16_t cell_temp[108][2],	SPI_HandleTypeDef *hspi);
 void ltc6804_rdcv_voltages(uint8_t ic_n, uint16_t cell_voltages[108][2],	SPI_HandleTypeDef *hspi);
 void ltc6804_command_temperatures(uint8_t start, uint8_t parity, SPI_HandleTypeDef *hspi);
