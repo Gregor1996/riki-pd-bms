@@ -50,7 +50,7 @@
 #define TOT_IC 12 // number of daisy chain
 #define CELL_CH 9
 CAN_FilterConfTypeDef runFilter;
-CAN_FilterConfTypeDef pcfilter;
+CAN_FilterConfTypeDef pcFilter;
 CanRxMsgTypeDef RxMsg;
 CanTxMsgTypeDef TxMsg;
 
@@ -88,15 +88,13 @@ uint8_t TsOFF[] = {0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 uint32_t adcCurrent[512];
 int32_t instCurrent;
 int32_t current;
-
+int32_t current_s;
 PackStateTypeDef state = PACK_OK;
 
 uint8_t fault_counter = 0;
 uint8_t BMS_status = 0;
 uint8_t precharge;
 uint16_t precharge_timer = 0;
-int16_t inv1_bus_voltage;
-int16_t inv2_bus_voltage;
 int32_t bus_voltage;
 
 /* USER CODE END PV */
@@ -167,36 +165,42 @@ int main(void)
   runFilter.FilterActivation = ENABLE;
   HAL_CAN_ConfigFilter(&hcan, &runFilter);
 
-  runFilter.FilterNumber = 0;
-  runFilter.FilterMode = CAN_FILTERMODE_IDLIST;
-  runFilter.FilterIdLow = 0x181 << 5;
-  runFilter.FilterIdHigh = 0x182 << 5;
-  runFilter.FilterMaskIdHigh = 0x181 << 5;
-  runFilter.FilterMaskIdLow = 0x182 << 5;
-  runFilter.FilterFIFOAssignment = CAN_FILTER_FIFO0;
-  runFilter.FilterScale  = CAN_FILTERSCALE_16BIT;
-  runFilter.FilterActivation = ENABLE;
+  pcFilter.FilterNumber = 0;
+  pcFilter.FilterMode = CAN_FILTERMODE_IDLIST;
+  pcFilter.FilterIdLow = 0x181 << 5;
+  pcFilter.FilterIdHigh = 0x181 << 5;
+  pcFilter.FilterMaskIdHigh = 0x181 << 5;
+  pcFilter.FilterMaskIdLow = 0x181 << 5;
+  pcFilter.FilterFIFOAssignment = CAN_FILTER_FIFO0;
+  pcFilter.FilterScale  = CAN_FILTERSCALE_16BIT;
+  pcFilter.FilterActivation = ENABLE;
 
   // BMS Status OFF
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
+  //HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_SET);
   precharge = 1;
 
   // First cell  reads
-  // Voltages
+   //Voltages
   ltc6804_adcv(0, &hspi1);
   HAL_Delay(10);
+
   for(uint8_t current_ic = 0; current_ic < TOT_IC; current_ic++){
 	  ltc6804_rdcv_voltages(current_ic, cell_voltages, &hspi1);
   }
+
   // Temperatures
   ltc6804_command_temperatures(1, 0, &hspi1);
   ltc6804_adcv(1, &hspi1);
   HAL_Delay(10);
+
   for(uint8_t current_ic = 0; current_ic < TOT_IC; current_ic++)
 	  ltc6804_rdcv_temp(current_ic, 0, cell_temperatures, &hspi1);
+
   ltc6804_command_temperatures(1, 1, &hspi1);
   ltc6804_adcv(1, &hspi1);
   HAL_Delay(10);
+
   for(uint8_t current_ic = 0; current_ic < TOT_IC; current_ic++)
 	  ltc6804_rdcv_temp(current_ic, 1, cell_temperatures, &hspi1);
   ltc6804_command_temperatures(0, 0, &hspi1);
@@ -211,7 +215,7 @@ int main(void)
   cell_temperatures[90][1]=0;
   cell_temperatures[91][1]=0;
 
-  //Start current measuring
+ // Start current measuring
   HAL_ADC_Start_DMA(&hadc1, adcCurrent, 512);
 
   /* USER CODE END 2 */
@@ -221,6 +225,11 @@ int main(void)
 
   while (1)
   {
+//	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_RESET);
+//	  HAL_Delay(4000);
+//
+//	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
+//	  HAL_Delay(15000);
 
 	  // Voltages
 	  ltc6804_adcv(0, &hspi1);
@@ -252,10 +261,13 @@ int main(void)
 	  instCurrent = 0;
 	  for(int i = 0; i < 512; i++)
 		  instCurrent += adcCurrent[i];
-	  instCurrent = - (instCurrent/512 - 2589)  * 13.30;
-	  current = current + instCurrent - (current >> 4);
 
-	  state = status(cell_voltages, cell_temperatures, &pack_v, &pack_t, &max_t, instCurrent, &cell, &value);
+	  instCurrent = - (instCurrent/512 - 2589)  * 13.30;                           //DA RISOLVERE
+	  current_s = current_s + instCurrent - (current_s / 16);
+	  current= current_s/16;
+
+	 state = status(cell_voltages, cell_temperatures, &pack_v, &pack_t, &max_t, instCurrent, &cell, &value);
+	  //state== PACK_OK;       // DA TOGLIERE
 
 	  if(state == PACK_OK){
 
@@ -311,9 +323,6 @@ int main(void)
 		  //inverter1 bus voltage request
 		  CAN_Transmit(&hcan, 0x201, 3, InvBusVoltage);
 
-		  //inverter2 bus voltage request
-		  CAN_Transmit(&hcan, 0x202, 3, InvBusVoltage);
-
 
 		  for(int i = 0; i < 2; i++){
 
@@ -322,26 +331,16 @@ int main(void)
 
 				  if(RxMsg.StdId == 0x181 && RxMsg.Data[0] == 0xEB){
 
-					  inv1_bus_voltage = RxMsg.Data[2] << 8;
-					  inv1_bus_voltage += RxMsg.Data[1];
-
-				  }
-				  if(RxMsg.StdId == 0x182 && RxMsg.Data[0] == 0xEB){
-
-					  inv2_bus_voltage = RxMsg.Data[2] << 8;
-					  inv2_bus_voltage += RxMsg.Data[1];
-
+					  bus_voltage = RxMsg.Data[2] << 8;
+					  bus_voltage += RxMsg.Data[1];
 
 				  }
 
 			  }
 		  }
+		  bus_voltage = bus_voltage * 10000 / 31.499;
 
-
-		  bus_voltage = (inv1_bus_voltage + inv2_bus_voltage) / 2;
-		  bus_voltage = bus_voltage / 31.499;
-
-		  if(bus_voltage > pack_v * 0.000090){
+		  if(bus_voltage > pack_v * 0.90){
 
 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_SET);
 			  HAL_Delay(1);
@@ -355,6 +354,7 @@ int main(void)
 
  			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_RESET);
  			  precharge = 1;
+			  HAL_CAN_ConfigFilter(&hcan, &runFilter);
 
 		  }
 
@@ -363,18 +363,17 @@ int main(void)
 	  hcan.pRxMsg = &RxMsg;
 	  if(HAL_CAN_Receive(&hcan,CAN_FIFO0, 1) == HAL_OK){
 
-		  if(RxMsg.StdId == 0x55 && RxMsg.Data[0] == 0x0A && RxMsg.Data[1] == 0x00){  //IF BYTE2 ==0 PRECHARGE CON CONTROLLO INVERTER
+		  if(RxMsg.StdId == 0x55 && RxMsg.Data[0] == 0x0A && RxMsg.Data[1] == 0x01){  //IF BYTE2 ==0 PRECHARGE CON CONTROLLO INVERTER
 
 			  //TS ON procedure with delay as pre-charge control
 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
 			  precharge = 0;
-			  precharge_timer = 0;
-			  inv1_bus_voltage = 0;
-			  inv2_bus_voltage = 0;
-			  HAL_CAN_ConfigFilter(&hcan, &pcfilter);
+			  precharge_timer = 0;                                       //INVERTIRE RXMSG
+			  bus_voltage = 0;
+			  HAL_CAN_ConfigFilter(&hcan, &pcFilter);
 
 		  }
-		  else if(RxMsg.StdId == 0x55 && RxMsg.Data[0] == 0x0A && RxMsg.Data[1] == 0x01){  ////IF BYTE2 ==0 PRECHARGE CON 15 SEC
+		  else if(RxMsg.StdId == 0x55 && RxMsg.Data[0] == 0x0A && RxMsg.Data[1] == 0x00){  ////IF BYTE2 ==0 PRECHARGE CON 15 SEC
 
 			  //TS ON procedure with delay as pre-charge control
 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
@@ -397,18 +396,24 @@ int main(void)
 
 	  		  for(uint8_t i=0;i<108;i+=3){
 
+
 				data[0] = i;
-				data[1] = (uint8_t) (cell_voltages[i][0] / 200);
-				data[2] = (uint8_t) (cell_temperatures[i][0] / 20);
-				data[3] = (uint8_t) (cell_voltages[i+1][0] / 200);
-				data[4] =  (uint8_t) (cell_temperatures[i+1][0] / 20);
-				data[5] = (uint8_t) (cell_voltages[i+2][0] / 200);
-				data[6] =  (uint8_t) (cell_temperatures[i+2][0] / 20);
+				data[1] = (uint8_t) (cell_voltages[i][0] / 400);   //*0.04
+				data[2] = (uint8_t) (cell_temperatures[i][0] / 40);//*.4
+				data[3] = (uint8_t) (cell_voltages[i+1][0] / 400);
+				data[4] =  (uint8_t) (cell_temperatures[i+1][0] / 40);
+				data[5] = (uint8_t) (cell_voltages[i+2][0] / 400);
+				data[6] =  (uint8_t) (cell_temperatures[i+2][0] / 40);
 				data[7] = 0;
 				CAN_Transmit(&hcan, 0xAB, 8, data);
-
+				HAL_Delay(100);
 	  		  }
 
+		  }
+ // for testing
+		  for(int i=0;i<108;i++){
+			  cell_voltages_vector[i]=cell_voltages[i][0];
+			  cell_temperatures_vector[i]=cell_temperatures[i][0];
 		  }
 
 	  }

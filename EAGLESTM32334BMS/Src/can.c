@@ -49,7 +49,7 @@ void ErrorMsg(PackStateTypeDef status, uint8_t cell, uint16_t value, uint8_t dat
 		data[5] = (uint8_t) value;
 		data[6] = 0;
 		data[7] = 0;
-		break;
+	break;
 	case OVER_VOLTAGE :
 		data[0] = 0x08;
 		data[1] = 0x02;
