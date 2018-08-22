@@ -110,23 +110,24 @@ void wakeup_idle(SPI_HandleTypeDef *hspi){
   * @retval		Battery status
   */
 PackStateTypeDef status(uint16_t cell_voltages[108][2],
-			   uint16_t cell_temperatures[108][2],
-			   uint32_t *pack_v,
-			   uint16_t *pack_t,
-			   uint16_t *max_t,
-			   int32_t current,
-			   uint8_t *cell,
-			   uint16_t *value){
+						uint16_t cell_temperatures[108][2],
+					    uint32_t *pack_v,
+					    uint16_t *pack_t,
+					    uint16_t *max_t,
+					    int32_t current,
+					    uint8_t *cell,
+					    uint16_t *value){
 
-	*max_t = 0;
-	uint32_t sum_t = 0;
-	*pack_v = 0;
+		*max_t = 0;
+	    uint32_t sum_t = 0;
+	  	*pack_v = 0;
+
 	for(int i = 0; i < 108; i++){
 		if(cell_temperatures[i][0] > *max_t)
-			*max_t = cell_temperatures[i][0];
+		*max_t = cell_temperatures[i][0];
 		sum_t += cell_temperatures[i][0];
 		*pack_v += cell_voltages[i][0];
-		if(cell_voltages[1][1] > 1000 || cell_temperatures[i][1] > 20){
+		if(cell_voltages[1][1] > 10 || cell_temperatures[i][1] > 10){
 
 			*cell = i;
 			return DATA_NOT_UPDATED;

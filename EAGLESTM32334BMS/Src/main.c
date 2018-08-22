@@ -59,11 +59,8 @@ CanTxMsgTypeDef TxMsg;
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
 DMA_HandleTypeDef hdma_adc1;
-
 CAN_HandleTypeDef hcan;
-
 SPI_HandleTypeDef hspi1;
-
 TIM_HandleTypeDef htim6;
 
 /* USER CODE BEGIN PV */
@@ -205,14 +202,14 @@ int main(void)
   ltc6804_command_temperatures(0, 0, &hspi1);
 
   //Cells 90 and 91 not working
-  cell_voltages[90][0]=(cell_voltages[89][0]+cell_voltages[88][0])/2;
-  cell_voltages[91][0]=(cell_voltages[92][0]+cell_voltages[93][0])/2;
-  cell_voltages[90][1]=0;
-  cell_voltages[91][1]=0;
-  cell_temperatures[90][0]=(cell_temperatures[89][0]+cell_temperatures[88][0])/2;
-  cell_temperatures[91][0]=(cell_temperatures[92][0]+cell_temperatures[93][0])/2;
-  cell_temperatures[90][1]=0;
-  cell_temperatures[91][1]=0;
+  cell_voltages[90][0] = (cell_voltages[89][0] + cell_voltages[88][0]) / 2;
+  cell_voltages[91][0] = (cell_voltages[92][0] + cell_voltages[93][0]) / 2;
+  cell_voltages[90][1] = 0;
+  cell_voltages[91][1] = 0;
+  cell_temperatures[90][0] = (cell_temperatures[89][0] + cell_temperatures[88][0]) / 2;
+  cell_temperatures[91][0] = (cell_temperatures[92][0] + cell_temperatures[93][0]) / 2;
+  cell_temperatures[90][1] = 0;
+  cell_temperatures[91][1] = 0;
 
  // Start current measuring
   HAL_ADC_Start_DMA(&hadc1, adcCurrent, 512);
@@ -224,12 +221,17 @@ int main(void)
 
   while (1)
   {
+	  if(HAL_CAN_GetState(&hcan)==HAL_CAN_ERROR_BOF){
+		  // BMS Status OFF
+		 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
 
+	  }
 	  // Voltages
 	  ltc6804_adcv(0, &hspi1);
 	  HAL_Delay(10);
 	  for(uint8_t current_ic = 0; current_ic < TOT_IC; current_ic++)
 		  ltc6804_rdcv_voltages(current_ic, cell_voltages, &hspi1);
+
 	  // Temperatures
 	  if (++parity == 2)
 		  parity = 0;
@@ -241,14 +243,14 @@ int main(void)
 	  ltc6804_command_temperatures(0, 0, &hspi1);
 
 	  //Cells 90 and 91 not working
-	  cell_voltages[90][0]=(cell_voltages[89][0]+cell_voltages[88][0])/2;
-	  cell_voltages[91][0]=(cell_voltages[92][0]+cell_voltages[93][0])/2;
-	  cell_voltages[90][1]=0;
-	  cell_voltages[91][1]=0;
-	  cell_temperatures[90][0]=(cell_temperatures[89][0]+cell_temperatures[88][0])/2;
-	  cell_temperatures[91][0]=(cell_temperatures[92][0]+cell_temperatures[93][0])/2;
-	  cell_temperatures[90][1]=0;
-	  cell_temperatures[91][1]=0;
+	  cell_voltages[90][0] = (cell_voltages[89][0] + cell_voltages[88][0])/2;
+	  cell_voltages[91][0] = (cell_voltages[92][0] + cell_voltages[93][0])/2;
+	  cell_voltages[90][1] = 0;
+	  cell_voltages[91][1] = 0;
+	  cell_temperatures[90][0] = (cell_temperatures[89][0]+cell_temperatures[88][0])/2;
+	  cell_temperatures[91][0] = (cell_temperatures[92][0]+cell_temperatures[93][0])/2;
+	  cell_temperatures[90][1] = 0;
+	  cell_temperatures[91][1] = 0;
 
 
 	  //Current
@@ -256,12 +258,12 @@ int main(void)
 	  for(int i = 0; i < 512; i++)
 		  instCurrent += adcCurrent[i];
 
-	  instCurrent = - (instCurrent/512 - 2595)  * 13.30;                           //DA RISOLVERE
+	  instCurrent = - (instCurrent/512 - 2595)  * 12.91;
 	  current_s = current_s + instCurrent - (current_s / 16);
 	  current= current_s/16;
 
 	 state = status(cell_voltages, cell_temperatures, &pack_v, &pack_t, &max_t, instCurrent, &cell, &value);
-	  //state== PACK_OK;       // DA TOGLIERE
+
 
 	  if(state == PACK_OK){
 
