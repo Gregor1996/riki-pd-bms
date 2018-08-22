@@ -126,7 +126,7 @@ PackStateTypeDef status(uint16_t cell_voltages[108][2],
 			*max_t = cell_temperatures[i][0];
 		sum_t += cell_temperatures[i][0];
 		*pack_v += cell_voltages[i][0];
-		if(cell_voltages[1][1] > 1000 || cell_temperatures[i][1] > 1000){
+		if(cell_voltages[1][1] > 1000 || cell_temperatures[i][1] > 20){
 
 			*cell = i;
 			return DATA_NOT_UPDATED;

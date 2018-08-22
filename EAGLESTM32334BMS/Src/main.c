@@ -177,7 +177,6 @@ int main(void)
 
   // BMS Status OFF
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
-  //HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_SET);
   precharge = 1;
 
   // First cell  reads
@@ -225,11 +224,6 @@ int main(void)
 
   while (1)
   {
-//	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_RESET);
-//	  HAL_Delay(4000);
-//
-//	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
-//	  HAL_Delay(15000);
 
 	  // Voltages
 	  ltc6804_adcv(0, &hspi1);
@@ -262,7 +256,7 @@ int main(void)
 	  for(int i = 0; i < 512; i++)
 		  instCurrent += adcCurrent[i];
 
-	  instCurrent = - (instCurrent/512 - 2589)  * 13.30;                           //DA RISOLVERE
+	  instCurrent = - (instCurrent/512 - 2595)  * 13.30;                           //DA RISOLVERE
 	  current_s = current_s + instCurrent - (current_s / 16);
 	  current= current_s/16;
 
@@ -309,9 +303,9 @@ int main(void)
 
 	  // Send current data via CAN
 	  data[0] = 0x05;
-	  data[1] = (int8_t) (instCurrent >> 8);
-	  data[2] = (int8_t) instCurrent;
-	  data[3] = 0;
+	  data[1] = (int8_t) (current >> 16);
+	  data[2] = (int8_t) (current >> 8);
+	  data[3] = (int8_t) current;
 	  data[4] = 0;
 	  data[5] = 0;
 	  data[6] = 0;
@@ -363,7 +357,7 @@ int main(void)
 	  hcan.pRxMsg = &RxMsg;
 	  if(HAL_CAN_Receive(&hcan,CAN_FIFO0, 1) == HAL_OK){
 
-		  if(RxMsg.StdId == 0x55 && RxMsg.Data[0] == 0x0A && RxMsg.Data[1] == 0x01){  //IF BYTE2 ==0 PRECHARGE CON CONTROLLO INVERTER
+		  if(RxMsg.StdId == 0x55 && RxMsg.Data[0] == 0x0A && RxMsg.Data[1] == 0x00){
 
 			  //TS ON procedure with delay as pre-charge control
 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
@@ -373,7 +367,7 @@ int main(void)
 			  HAL_CAN_ConfigFilter(&hcan, &pcFilter);
 
 		  }
-		  else if(RxMsg.StdId == 0x55 && RxMsg.Data[0] == 0x0A && RxMsg.Data[1] == 0x00){  ////IF BYTE2 ==0 PRECHARGE CON 15 SEC
+		  else if(RxMsg.StdId == 0x55 && RxMsg.Data[0] == 0x0A && RxMsg.Data[1] == 0x01){
 
 			  //TS ON procedure with delay as pre-charge control
 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
@@ -406,14 +400,9 @@ int main(void)
 				data[6] =  (uint8_t) (cell_temperatures[i+2][0] / 40);
 				data[7] = 0;
 				CAN_Transmit(&hcan, 0xAB, 8, data);
-				HAL_Delay(100);
+				HAL_Delay(10);
 	  		  }
 
-		  }
- // for testing
-		  for(int i=0;i<108;i++){
-			  cell_voltages_vector[i]=cell_voltages[i][0];
-			  cell_temperatures_vector[i]=cell_temperatures[i][0];
 		  }
 
 	  }
