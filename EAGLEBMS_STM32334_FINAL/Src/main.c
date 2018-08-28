@@ -337,7 +337,7 @@ int main(void)
 		  bus_voltage = bus_voltage * 10000 / 31.499;
 
 		  if(bus_voltage > pack_v * 0.90){
-
+			  HAL_Delay(1000);
 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_SET);
 			  HAL_Delay(1);
 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_RESET);
@@ -364,7 +364,7 @@ int main(void)
 			  //TS ON procedure with delay as pre-charge control
 			  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
 			  precharge = 0;
-			  precharge_timer = 0;                                       //INVERTIRE RXMSG
+			  precharge_timer = 0;
 			  bus_voltage = 0;
 			  HAL_CAN_ConfigFilter(&hcan, &pcFilter);
 

@@ -118,15 +118,17 @@ PackStateTypeDef status(uint16_t cell_voltages[108][2],
 					    uint8_t *cell,
 					    uint16_t *value){
 
-		*max_t = 0;
+
 	    uint32_t sum_t = 0;
-	  	*pack_v = 0;
+
+	  	uint32_t pack_v_temp=0;
+	  	uint32_t max_t_temp=0;
 
 	for(int i = 0; i < 108; i++){
-		if(cell_temperatures[i][0] > *max_t)
-		*max_t = cell_temperatures[i][0];
+		if(cell_temperatures[i][0] > max_t_temp)
+		max_t_temp = cell_temperatures[i][0];
 		sum_t += cell_temperatures[i][0];
-		*pack_v += cell_voltages[i][0];
+		pack_v_temp += cell_voltages[i][0];
 		if(cell_voltages[1][1] > 10 || cell_temperatures[i][1] > 10){
 
 			*cell = i;
@@ -163,6 +165,8 @@ PackStateTypeDef status(uint16_t cell_voltages[108][2],
 		return PACK_OVER_TEMPERATURE;
 
 	}
+	*max_t=max_t_temp;
+	*pack_v=pack_v_temp;
 	return PACK_OK;
 }
 
